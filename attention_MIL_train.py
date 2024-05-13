@@ -329,7 +329,7 @@ for epoch in range(300):
     val_running_loss = 0.0
     val_acc_loss=0
     with torch.no_grad():
-        total_y = torch.zeros((len(test_dataloader), 3)).to(device)
+        total_y = torch.zeros((len(test_dataloader)*batch_size+batch_size, 3)).to(device)
         total_prob = torch.zeros((len(test_dataloader), 3)).to(device)
         for x,y in val:
             y = y.to(device).float()
@@ -338,8 +338,8 @@ for epoch in range(300):
             predict = model(x).to(device)
             cost = criterion(predict.softmax(dim=1), y.argmax(dim=1)) # cost 구함
             acc=accuracy(predict.softmax(dim=1), y.argmax(dim=1))
-            total_y[count] = y.squeeze(dim=1)
-            total_prob[count] = predict.softmax(dim=1)
+            total_y[val_count*batch_size:val_count*batch_size+batch_size] = y.squeeze(dim=1)
+            total_prob[val_count*batch_size:val_count*batch_size+batch_size] = predict.softmax(dim=1)
             val_running_loss+=cost.item()
             val_acc_loss+=acc
             val.set_description(f"val_epoch: {epoch+1}/{300} Step: {count+1} loss : {val_running_loss/val_count:.4f} accuracy: {val_acc_loss/val_count:.4f}")
