@@ -55,45 +55,6 @@ class CustomDataset(Dataset):
     
         label_tensor =  self.label[idx]
         return image_tensor, label_tensor
-
-
-train_data=pd.read_csv('../../data/mteg_data/internal/1-fold_train.csv') 
-file_path='../../data/mteg_data/internal/all/'
-train_image_list=[]
-for i in range(len(train_data)):
-    file_name=train_data.loc[i]['File Name']
-    id=file_name[:file_name.find('_')]
-    train_image_list.append(file_path+id)
-label_data=pd.read_csv('../../data/mteg_data/internal/label.csv')  
-train_label_list=[]
-train_id_list=[]
-train_image_tensor = torch.empty((len(train_image_list),image_count,3, img_size, img_size))
-for i in tqdm(range(len(train_image_list))):
-    folder_name=os.path.basename(train_image_list[i])
-    dst_label=label_data.loc[label_data['일련번호']==int(folder_name[:-1])]
-    dst_label=dst_label.loc[dst_label['구분값']==int(folder_name[-1])].reset_index()
-    label=int(dst_label.loc[0]['OTE 원인'])
-    train_id_list.append(folder_name)
-    train_label_list.append(label-1) 
-    image_file_list = glob(train_image_list[i]+'/*.jpg')
-    if len(image_file_list)>image_count:
-        image_index = torch.randint(low=0, high=len(
-            image_file_list)-image_count, size=(1,))
-        count = 0
-        for index in range(image_count):
-            image = 1-tf(Image.open(image_file_list[index]).resize((img_size,img_size)))
-            train_image_tensor[i,count] = image
-            count += 1
-    else:
-        count = 0
-        for index in range(len(image_file_list)):
-            image = 1-tf(Image.open(image_file_list[index]).resize((img_size,img_size)))
-            train_image_tensor[i,count] = image
-            count += 1
-        for j in range(image_count-count-1):
-            image = 1-tf(Image.open(image_file_list[j]).resize((img_size,img_size)))
-            train_image_tensor[i,count] = image
-            count += 1
             
 
 test_data=pd.read_csv('../../data/mteg_data/internal/1-fold_test.csv') 
@@ -134,7 +95,9 @@ for i in tqdm(range(len(test_image_list))):
             test_image_tensor[i,count] = image
             count += 1
 
-
+train_id_list=test_id_list
+train_label_list=test_label_list
+train_image_tensor=test_image_tensor
 train_dataset = CustomDataset(train_id_list,train_image_tensor, F.one_hot(torch.tensor(train_label_list).to(torch.int64)))
 train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 test_dataset = CustomDataset(test_id_list,test_image_tensor, F.one_hot(torch.tensor(test_label_list).to(torch.int64)))
@@ -279,8 +242,8 @@ class_weights = [1 - (x / sum(class_counts)) for x in class_counts]
 class_weights =  torch.FloatTensor(class_weights).to(device)
 criterion = nn.CrossEntropyLoss(weight=class_weights).to(device)
 accuracy = torchmetrics.Accuracy(task="multiclass",num_classes=3).to(device)
-base_optimizer = torch.optim.SGD
-optimizer = SAM(model.parameters(), base_optimizer, lr=2e-2, momentum=0.9)
+optimizer = torch.optim.SGD(model.parameters(), lr=2e-2, momentum=0.9)
+# optimizer = SAM(model.parameters(), base_optimizer, lr=2e-2, momentum=0.9)
 optimizer1 = torch.optim.NAdam(model.parameters(), lr=2e-5)
 start = time.time()
 d = datetime.datetime.now()
@@ -303,20 +266,15 @@ for epoch in range(300):
     acc_loss=0
     model.train()
     for x, y in train:
+        optimizer.zero_grad()
         y = y.float().to(device)
         count+=1
         x=x.float().to(device)
-        enable_running_stats(model)
         predict = model(x).to(device)
         cost = criterion(predict.softmax(dim=1), y.argmax(dim=1)) # cost 구함
         acc=accuracy(predict.softmax(dim=1), y.argmax(dim=1))
         cost.backward() # cost에 대한 backward 구함
-        optimizer.first_step(zero_grad=True)
-        disable_running_stats(model)
-        predict = model(x).to(device)
-        cost1 = criterion(predict.softmax(dim=1), y.argmax(dim=1)) # cost 구함
-        cost1.backward() # cost에 대한 backward 구함
-        optimizer.second_step(zero_grad=True)
+        optimizer.step()
         running_loss += cost.item()
         acc_loss+=acc
         train.set_description(f"epoch: {epoch+1}/{300} Step: {count+1} loss : {running_loss/count:.4f} accuracy: {acc_loss/count:.4f}")
@@ -330,7 +288,7 @@ for epoch in range(300):
     val_acc_loss=0
     with torch.no_grad():
         total_y = torch.zeros((len(test_dataloader)*batch_size+batch_size, 3)).to(device)
-        total_prob = torch.zeros((len(test_dataloader), 3)).to(device)
+        total_prob = torch.zeros((len(test_dataloader)*batch_size+batch_size, 3)).to(device)
         for x,y in val:
             y = y.to(device).float()
             val_count+=1
