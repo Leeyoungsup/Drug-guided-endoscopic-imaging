@@ -33,7 +33,7 @@ from sklearn.metrics import f1_score
 import datetime
 import random
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"]= "6" 
+os.environ["CUDA_VISIBLE_DEVICES"]= "4" 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 batch_size=4
 image_count=50
@@ -57,14 +57,14 @@ class CustomDataset(Dataset):
         return image_tensor, label_tensor
             
 
-test_data=pd.read_csv('../../data/mteg_data/lateral_internal/5-fold_test.csv') 
-file_path='../../data/mteg_data/lateral_internal/all/'
+test_data=pd.read_csv('../../data/velum/test_label.csv') 
+file_path='../../data/velum/test/'
 test_image_list=[]
 for i in range(len(test_data)):
     file_name=test_data.loc[i]['File Name']
     id=file_name[:file_name.find('_')]
     test_image_list.append(file_path+id)
-label_data=pd.read_csv('../../data/mteg_data/lateral_internal/label.csv')  
+label_data=pd.read_csv('../../data/velum/label.csv')  
 test_label_list=[]
 test_id_list=[]
 test_image_tensor = torch.empty((len(test_image_list),image_count,3, img_size, img_size))
@@ -72,7 +72,7 @@ for i in tqdm(range(len(test_image_list))):
     folder_name=os.path.basename(test_image_list[i])
     dst_label=label_data.loc[label_data['일련번호']==int(folder_name[:-1])]
     dst_label=dst_label.loc[dst_label['구분값']==int(folder_name[-1])].reset_index()
-    label=int(dst_label.loc[0]['OTE 원인'])
+    label=int(dst_label.loc[0]['velum'])
     test_id_list.append(folder_name)
     test_label_list.append(label-1) 
     image_file_list = glob(test_image_list[i]+'/*.jpg')
@@ -304,7 +304,7 @@ for epoch in range(300):
         val_loss_list.append((val_running_loss/val_count))
         val_acc_list.append((val_acc_loss/val_count).cpu().detach().numpy())  
         f1 = f1_score(total_y.cpu().argmax(axis=1),total_prob.cpu().argmax(axis=1), average='micro')
-        torch.save(model.state_dict(), '../../model/mteg/lateral_internal/5-fold/f1_'+str(round(f1,4))+'.pt')
+        torch.save(model.state_dict(), '../../model/velum/f1_'+str(round(f1,4))+'.pt')
 end = time.time()
 d = datetime.datetime.now()
 now_time = f"{d.year}-{d.month}-{d.day} {d.hour}:{d.minute}:{d.second}"
